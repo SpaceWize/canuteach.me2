@@ -31,54 +31,103 @@ function toggleChat(value){open=value;chat.hidden=!value;bot.setAttribute('aria-
 bot.onclick=()=>toggleChat(!open);chat.querySelector('.byte-close').onclick=()=>toggleChat(false);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&open)toggleChat(false);});
 bot.addEventListener('pointerenter',()=>hover=true);bot.addEventListener('pointerleave',()=>hover=false);
-// Candidate ledges. Line breaks were tried and removed: a <br> inside a
-// paragraph has no drawn edge, so Byte ended up standing on blank space or on
-// top of the words themselves. He should only ever stand on something the
-// reader can actually see the top of.
-const candidates=[...document.querySelectorAll(
- 'main section,main img,main hr,main .btn,main .card,main .quote,main .path-card,main .path-image,main .hero-stage,main .magnetic'
-)];
+// Rather than naming selectors, sweep everything in main and keep whatever
+// actually draws an edge. Line breaks were tried and removed: a <br> inside a
+// paragraph paints nothing, so Byte stood on blank space or on top of the
+// words. He should only ever stand on something the reader can see.
+const candidates=[...document.querySelectorAll('main *')];
 
-// Does this element paint a top edge you could believe in? Images and rules
-// always do. Anything else qualifies only if it fills its own background or
-// draws a top border — which is exactly what separates a colour band or a
-// solid callout from a transparent wrapper sitting invisibly around text.
+const rgb=c=>{const m=(c||'').match(/[\d.]+/g);return m?m.slice(0,3).map(Number):null;};
+const alphaOf=c=>{const m=(c||'').match(/[\d.]+/g);return m&&m.length>3?+m[3]:(m?1:0);};
+const channelGap=(a,b)=>a&&b?Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2])):0;
+
+// What is actually painted behind this element, walking up to the first
+// ancestor that fills anything.
+function behindColour(el){
+ let p=el.parentElement;
+ while(p){
+  const cs=getComputedStyle(p);
+  if(alphaOf(cs.backgroundColor)>.05){const c=rgb(cs.backgroundColor);if(c)return c;}
+  p=p.parentElement;
+ }
+ return rgb(getComputedStyle(document.body).backgroundColor)||[255,255,255];
+}
+
+// A fill only reads as an edge if it differs from what is behind it. 24 per
+// channel is enough to drop near-invisible tints without losing real blocks.
+const MIN_CONTRAST=24;
+
+// Does this element paint an edge you could believe in?
+//
+// Two traps this has to avoid, both found by watching him stand in silly
+// places. First, "has a background" is not enough — a card tinted 15 shades
+// off the page background looks like nothing. Second, an underlined text link
+// technically has a bottom border, so a naive border check had him balancing
+// on the underline of a sentence. Borders therefore only count when they span
+// a block wide enough to be a rule across the page.
 function hasVisibleSurface(el){
  if(el.tagName==='IMG'||el.tagName==='HR')return true;
  const cs=getComputedStyle(el);
- const bg=cs.backgroundColor||'';
- if(bg&&!/^rgba\(0,\s*0,\s*0,\s*0\)$|^transparent$/.test(bg.trim()))return true;
+ if(alphaOf(cs.backgroundColor)>.05){
+  const own=rgb(cs.backgroundColor);
+  if(own&&channelGap(own,behindColour(el))>=MIN_CONTRAST)return true;
+ }
  if(cs.backgroundImage&&cs.backgroundImage!=='none')return true;
- return parseFloat(cs.borderTopWidth)>0&&!/^rgba\(0,\s*0,\s*0,\s*0\)$/.test((cs.borderTopColor||'').trim());
+
+ const width=el.getBoundingClientRect().width;
+ const isBlock=/block|flex|grid|list-item/.test(cs.display);
+ const spansPage=width>=innerWidth*.4;
+ const border=Math.max(parseFloat(cs.borderTopWidth)||0,parseFloat(cs.borderBottomWidth)||0);
+ return isBlock&&spansPage&&border>=1&&
+        (alphaOf(cs.borderTopColor)>.05||alphaOf(cs.borderBottomColor)>.05);
 }
 
 // Resolved once at startup rather than per scroll: whether an element paints a
-// background does not change as the page moves, and getComputedStyle on every
-// candidate during a scroll would force a style recalc each time.
-const platforms=candidates.filter(hasVisibleSurface);
+// background does not change as the page moves, and getComputedStyle on ~150
+// nodes during a scroll would force a style recalc every time.
+const painted=candidates.filter(hasVisibleSurface);
+
+// A ledge is an element plus which of its edges to stand on. Colour bands get
+// both: where a band ENDS is just as visible a line as where it starts, and
+// top-edges-only missed every boundary where a coloured section gives way to
+// the page background.
+const platforms=painted.map(element=>({element,edge:'top'}));
 
 function measure(surface){
- if(surface.dock)return {...surface,left:innerWidth-160,top:innerHeight-55+scrollY,width:140};
  // The synthetic floor has no element behind it. Without this branch, landing
  // on it threw on the next frame when the walker re-measured its surface.
- if(surface.floor)return {...surface,left:0,width:innerWidth,top:scrollY+innerHeight-96};
+ if(surface.floor)return {...surface,left:0,width:innerWidth,top:scrollY+innerHeight-6,height:0};
  const r=surface.element.getBoundingClientRect();
- return {...surface,left:r.left+scrollX,top:r.top+scrollY,width:r.width};
+ return {...surface,
+  left:r.left+scrollX,
+  top:(surface.edge==='bottom'?r.bottom:r.top)+scrollY,
+  width:r.width,height:r.height};
 }
 
 // Rects are cached rather than remeasured per frame: the fall does a collision
 // test every tick, and calling getBoundingClientRect on ~40 nodes at 60fps
 // would force a layout flush each time.
 let ledges=[],ledgesStale=true;
+// Wide and tall enough to read as a band of colour rather than a small box.
+// Only these contribute a bottom edge — the underside of a button is not a
+// line anyone can see, but the end of a colour band very much is.
+const isBand=r=>r.width>=innerWidth*.6&&r.height>=140;
+
 function refreshLedges(){
- const found=platforms.map(element=>measure({element})).filter(r=>r.width>90&&Number.isFinite(r.top));
+ const found=[];
+ for(const p of platforms){
+  const top=measure(p);
+  found.push(top);
+  if(isBand(top))found.push(measure({element:p.element,edge:'bottom'}));
+ }
+ const usable=found.filter(r=>r.width>90&&Number.isFinite(r.top));
  // An image inside a card produces three ledges on identical coordinates — the
  // <img>, its .path-image wrapper and the <a> around both. They are the same
  // physical line, so keep one and let the innermost element win, which makes
  // "he landed on the image" true in the obvious sense as well as the visual one.
  const rank=el=>el&&el.tagName==='IMG'?0:1;
  const seen=new Map();
- for(const r of found){
+ for(const r of usable){
   const key=`${Math.round(r.top)}|${Math.round(r.left)}|${Math.round(r.width)}`;
   const prev=seen.get(key);
   if(!prev||rank(r.element)<rank(prev.element))seen.set(key,r);
@@ -115,7 +164,9 @@ function findGround(x,from,to){
 // Anchored to the viewport, like the dock, so he rides the bottom edge until a
 // real surface scrolls into range and nextAction can hop him onto it.
 function floorLedge(){
- return {floor:true,left:0,width:innerWidth,top:scrollY+innerHeight-96};
+ // Must match the floor branch in measure(), or he oscillates between two
+ // different floor heights every frame.
+ return {floor:true,left:0,width:innerWidth,top:scrollY+innerHeight-6};
 }
 // Where he prefers to sit when the page is still: low in the viewport. Resting
 // high up meant almost any scroll immediately pushed his ledge past the
@@ -131,7 +182,15 @@ const SETTLE_ZONE=.62;          // fraction of the viewport height to aim for
 const MAX_HOP_DOWN=900;
 
 function nextAction(){
- const options=visiblePlatforms();if(!options.length){if(!walker.surface?.dock){walker.hasRun=true;walker.jump(measure({dock:true}),.5);}return;}
+ const options=visiblePlatforms();
+ // No corner dock. Retreating to the bottom-right was his old fallback and it
+ // read as him giving up and sitting in a corner. If nothing is in reach he
+ // paces whatever he is already standing on instead, so he is always walking
+ // on something real.
+ if(!options.length){
+  if(walker.surface&&walker.surface.width>150)walker.run(walker.surface,walker.fraction>.5?.18:.82);
+  return;
+ }
  const current=walker.surface;
  const restLine=scrollY+innerHeight*SETTLE_ZONE;
 
@@ -216,7 +275,7 @@ window.addEventListener('scroll',()=>{
  lastScrollAt=performance.now();
  const goingDown=scrollY>lastScrollY;lastScrollY=scrollY;
  if(goingDown&&!paused&&innerWidth>=700&&walkingReady&&walker.surface&&
-    !walker.surface.dock&&!walker.surface.floor&&
+    !walker.surface.floor&&
     (walker.state==='idle'||walker.state==='run'||walker.state==='land')&&
     walker.surface.top-scrollY<STEP_OFF){
   walker.fall();

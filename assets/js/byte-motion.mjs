@@ -20,7 +20,10 @@ export class ByteMotion{
  setState(state,duration){this.state=state;this.elapsed=0;this.duration=duration;this.progress=0;}
 
  jump(surface,fraction=.5){this.destination={surface,fraction};const end=landingPoint(surface,fraction);this.direction=Math.sign(end.x-this.position.x)||this.direction;this.setState('crouch',.25);}
- run(surface,fraction){this.surface=surface;this.fromFraction=this.fraction;this.toFraction=fraction;this.direction=Math.sign(fraction-this.fraction)||this.direction;const distance=Math.abs(landingPoint(surface,fraction).x-this.position.x);this.setState('run',Math.max(.4,distance/100));}
+ // Duration is capped at 2.2s. Uncapped, a run the full width of the viewport
+ // floor took nine seconds, during which he never returned to idle — so he
+ // never re-checked for real ledges scrolling into view and just trudged.
+ run(surface,fraction){this.surface=surface;this.fromFraction=this.fraction;this.toFraction=fraction;this.direction=Math.sign(fraction-this.fraction)||this.direction;const distance=Math.abs(landingPoint(surface,fraction).x-this.position.x);this.setState('run',Math.max(.4,Math.min(2.2,distance/100)));}
 
  // Step off whatever he is standing on and let gravity take over. Called when
  // the ledge under him scrolls out of view, so scrolling drops him onto the
