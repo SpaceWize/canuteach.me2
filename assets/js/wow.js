@@ -24,6 +24,7 @@ chat.querySelector('form').addEventListener('submit',e=>{e.preventDefault();ask(
 let open=false,hover=false;
 const walker=new ByteMotion(innerWidth-78,innerHeight-65+scrollY);
 let footPixel=88,walkingReady=false,movementTime=0;
+let lastScrollAt=-1e9;   // when the page last actually moved, for the catch-up gate
 function place(){bot.style.transform=`translate3d(${walker.position.x-48}px,${walker.position.y-scrollY-footPixel}px,0)`;bot.dataset.movement=walker.state;bot.style.setProperty('--air-shadow',walker.state==='jump'?'.12':'.3');}
 place();
 function toggleChat(value){open=value;chat.hidden=!value;bot.setAttribute('aria-expanded',String(value));if(value)input.focus();else bot.focus();}
@@ -78,7 +79,10 @@ function refreshLedges(){
 function allLedges(){if(ledgesStale)refreshLedges();return ledges;}
 addEventListener('resize',()=>{ledgesStale=true;},{passive:true});
 
-function visiblePlatforms(){return allLedges().filter(r=>r.width>110&&r.top-scrollY>190&&r.top-scrollY<innerHeight-25&&r.left>=0&&r.left+r.width<=innerWidth+2);}
+// The lower bound is innerHeight-96, not -25: his feet sit 88px below the top
+// of his sprite, so a ledge 25px off the bottom left him hanging half off the
+// screen once he deliberately started heading downward.
+function visiblePlatforms(){return allLedges().filter(r=>r.width>110&&r.top-scrollY>190&&r.top-scrollY<innerHeight-96&&r.left>=0&&r.left+r.width<=innerWidth+2);}
 
 // Highest ledge crossed while falling from `from` to `to` at horizontal x.
 // Sweeping the segment (rather than testing the end point) stops a fast fall
@@ -99,10 +103,33 @@ function floorLedge(){
  const bottom=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);
  return {floor:true,left:0,width:innerWidth,top:bottom-90};
 }
+// Where he prefers to sit when the page is still: low in the viewport. Resting
+// high up meant almost any scroll immediately pushed his ledge past the
+// step-off line and dropped him, so he was falling constantly. Descending on
+// his own while nothing is moving buys that headroom back, and makes the fall
+// something the reader causes rather than something that just keeps happening.
+const SETTLE_ZONE=.62;          // fraction of the viewport height to aim for
+const MAX_HOP_DOWN=520;         // px; keeps a deliberate hop readable, not a plunge
+
 function nextAction(){
  const options=visiblePlatforms();if(!options.length){if(!walker.surface?.dock){walker.hasRun=true;walker.jump(measure({dock:true}),.5);}return;}
  const current=walker.surface;
- // Traverse the current ledge before launching to another; favour lower ledges.
+ const restLine=scrollY+innerHeight*SETTLE_ZONE;
+
+ // Still sitting above the resting line: deliberately work downward, taking
+ // the lowest ledge within one comfortable hop each time.
+ if(walker.position.y<restLine){
+  const down=options.filter(o=>o.element!==current?.element&&o.top>walker.position.y+30&&o.top-walker.position.y<MAX_HOP_DOWN);
+  if(down.length){
+   down.sort((a,b)=>b.top-a.top);       // lowest first
+   walker.hasRun=false;
+   walker.jump(down[0],walker.direction>0?.35:.65);
+   return;
+  }
+ }
+
+ // Settled low enough — resume wandering. Traverse the current ledge before
+ // launching to another; favour lower ledges.
  if(current&&!walker.hasRun&&current.width>150){walker.hasRun=true;walker.run(current,walker.fraction>.5?.15:.85);return;}
  const other=options.filter(o=>o.element!==current?.element);
  const below=other.filter(o=>o.top>walker.position.y+35&&o.top-walker.position.y<650);
@@ -128,8 +155,14 @@ function moveByte(now){
    walker.fall();
   }
 
+  // The catch-up exists purely to stop scrolling from outrunning gravity, so
+  // it only applies while the page is actually moving or he is already in the
+  // air. Running it on a still page fought the deliberate descent below and
+  // livelocked him: it re-landed him every frame, so he never reached idle and
+  // never got to choose a next move.
+  const scrolling=now-lastScrollAt<400;
   const ceiling=scrollY+STEP_OFF;
-  if(walker.position.y<ceiling){
+  if((scrolling||walker.state==='fall')&&walker.position.y<ceiling){
    const dragged=findGround(walker.position.x,walker.position.y,ceiling);
    // Sweep whatever state he is in. Restricting this to the fall state meant a
    // ledge he was standing on could scroll past the ceiling and drag him
@@ -156,6 +189,7 @@ const STEP_OFF=140;               // px below the viewport top where he lets go
 let lastScrollY=scrollY;
 window.addEventListener('scroll',()=>{
  ledgesStale=true;                // layout moved under us; rects need remeasuring
+ lastScrollAt=performance.now();
  const goingDown=scrollY>lastScrollY;lastScrollY=scrollY;
  if(goingDown&&!paused&&innerWidth>=700&&walkingReady&&walker.surface&&
     !walker.surface.dock&&!walker.surface.floor&&
@@ -203,15 +237,26 @@ try{
    m.legs.forEach((leg,i)=>{leg.rotation.x=(i===0?.7:.35)*Math.sin(Math.PI*progress);m.knees[i].rotation.x=-.95*Math.sin(Math.PI*progress);m.arms[i].rotation.z=(i===0?-1:1)*(.5+.5*Math.sin(Math.PI*progress));m.elbows[i].rotation.x=-.5;});
    m.root.rotation.x=progress<.5?-.1:.13;
   }else if(state==='fall'){
-   // Arms thrown up, legs trailing, leaning back — reads as dropping rather
-   // than standing in mid-air. Eases in over the first third of a second so a
-   // short hop between close ledges does not snap into a dramatic pose.
+   // Flailing: arms windmilling overhead, legs cycling, body wobbling. Each
+   // limb runs on its own frequency and is offset half a cycle from its pair,
+   // so nothing beats in unison and it reads as panic rather than a march.
+   // Eases in over the first third of a second so a short drop between close
+   // ledges does not snap straight into full pantomime.
    const s=Math.min(1,progress*3);
+   const f=t*15;
    m.legs.forEach((leg,i)=>{
-    leg.rotation.x=(i===0?.5:.16)*s;m.knees[i].rotation.x=-.75*s;m.feet[i].rotation.x=.3*s;
-    m.arms[i].rotation.z=(i===0?-1:1)*1.25*s;m.arms[i].rotation.x=-.35*s;m.elbows[i].rotation.x=-.4;
+    const o=i*Math.PI;                                   // opposite phase per side
+    leg.rotation.x=(.3+.62*Math.sin(f+o))*s;
+    m.knees[i].rotation.x=(-.5-.5*Math.abs(Math.sin(f*1.27+o)))*s;
+    m.feet[i].rotation.x=(.2+.25*Math.sin(f*1.1+o))*s;
+    m.arms[i].rotation.z=(i===0?-1:1)*(1.05+.5*Math.sin(f*1.13+o))*s;
+    m.arms[i].rotation.x=(-.2+.6*Math.sin(f*.87+o))*s;
+    m.elbows[i].rotation.x=(-.3-.45*Math.abs(Math.sin(f*1.41+o)))*s;
    });
-   m.root.rotation.x=-.18*s;m.head.rotation.x=-.12*s;
+   m.root.rotation.x=(-.16+.06*Math.sin(f*.63))*s;
+   m.root.rotation.z=.08*Math.sin(f*.52)*s;
+   m.head.rotation.x=-.1*s;
+   m.head.rotation.z=.12*Math.sin(f*.79)*s;
   }
   // Plant the lowest sole on the surface; hip and knee bends lower the body.
   m.root.updateMatrixWorld(true);
