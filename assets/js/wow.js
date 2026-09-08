@@ -31,28 +31,38 @@ function toggleChat(value){open=value;chat.hidden=!value;bot.setAttribute('aria-
 bot.onclick=()=>toggleChat(!open);chat.querySelector('.byte-close').onclick=()=>toggleChat(false);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&open)toggleChat(false);});
 bot.addEventListener('pointerenter',()=>hover=true);bot.addEventListener('pointerleave',()=>hover=false);
-// Every horizontal edge Byte can stand on: section tops (the band boundaries),
-// every image, every line break, and the interactive blocks. A <br> is included
-// because it marks a real visual line in the copy even though it draws nothing.
-const platforms=[...document.querySelectorAll(
- 'main section,main img,main hr,main br,main .btn,main .card,main .quote,main .path-card,main .path-image,main .hero-stage,main .magnetic'
+// Candidate ledges. Line breaks were tried and removed: a <br> inside a
+// paragraph has no drawn edge, so Byte ended up standing on blank space or on
+// top of the words themselves. He should only ever stand on something the
+// reader can actually see the top of.
+const candidates=[...document.querySelectorAll(
+ 'main section,main img,main hr,main .btn,main .card,main .quote,main .path-card,main .path-image,main .hero-stage,main .magnetic'
 )];
 
-// A <br> has no box of its own — its rect is a zero-width sliver at the end of
-// the line. Borrow the parent block's horizontal extent so the line break
-// becomes a proper ledge spanning the text column.
-function ledgeRect(element){
- const r=element.getBoundingClientRect();
- if(element.tagName!=='BR')return r;
- const host=element.parentElement;
- if(!host)return r;
- const h=host.getBoundingClientRect();
- return {left:h.left,width:h.width,top:r.top||h.top,height:0};
+// Does this element paint a top edge you could believe in? Images and rules
+// always do. Anything else qualifies only if it fills its own background or
+// draws a top border — which is exactly what separates a colour band or a
+// solid callout from a transparent wrapper sitting invisibly around text.
+function hasVisibleSurface(el){
+ if(el.tagName==='IMG'||el.tagName==='HR')return true;
+ const cs=getComputedStyle(el);
+ const bg=cs.backgroundColor||'';
+ if(bg&&!/^rgba\(0,\s*0,\s*0,\s*0\)$|^transparent$/.test(bg.trim()))return true;
+ if(cs.backgroundImage&&cs.backgroundImage!=='none')return true;
+ return parseFloat(cs.borderTopWidth)>0&&!/^rgba\(0,\s*0,\s*0,\s*0\)$/.test((cs.borderTopColor||'').trim());
 }
+
+// Resolved once at startup rather than per scroll: whether an element paints a
+// background does not change as the page moves, and getComputedStyle on every
+// candidate during a scroll would force a style recalc each time.
+const platforms=candidates.filter(hasVisibleSurface);
 
 function measure(surface){
  if(surface.dock)return {...surface,left:innerWidth-160,top:innerHeight-55+scrollY,width:140};
- const r=ledgeRect(surface.element);
+ // The synthetic floor has no element behind it. Without this branch, landing
+ // on it threw on the next frame when the walker re-measured its surface.
+ if(surface.floor)return {...surface,left:0,width:innerWidth,top:scrollY+innerHeight-96};
+ const r=surface.element.getBoundingClientRect();
  return {...surface,left:r.left+scrollX,top:r.top+scrollY,width:r.width};
 }
 
@@ -97,11 +107,15 @@ function findGround(x,from,to){
  return best;
 }
 
-// Nothing below him at all — settle on the bottom of the document so he can
-// never fall out of the page and vanish.
+// The catch-all under every fall. Long stretches of this page — the reviews,
+// for instance — contain nothing with a drawn top edge, so a fall through them
+// finds no ledge at all. Rather than let him drop the length of the document,
+// he is caught at the bottom of the screen and stands there.
+//
+// Anchored to the viewport, like the dock, so he rides the bottom edge until a
+// real surface scrolls into range and nextAction can hop him onto it.
 function floorLedge(){
- const bottom=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);
- return {floor:true,left:0,width:innerWidth,top:bottom-90};
+ return {floor:true,left:0,width:innerWidth,top:scrollY+innerHeight-96};
 }
 // Where he prefers to sit when the page is still: low in the viewport. Resting
 // high up meant almost any scroll immediately pushed his ledge past the
@@ -109,7 +123,12 @@ function floorLedge(){
 // his own while nothing is moving buys that headroom back, and makes the fall
 // something the reader causes rather than something that just keeps happening.
 const SETTLE_ZONE=.62;          // fraction of the viewport height to aim for
-const MAX_HOP_DOWN=520;         // px; keeps a deliberate hop readable, not a plunge
+// Now that only genuinely visible surfaces count, ledges are far sparser —
+// roughly ten on this page rather than thirty. A 520px reach often found
+// nothing below him at all, so he stalled high up and paced instead of
+// descending. The jump duration already scales with distance, so a longer
+// reach still reads as one deliberate hop rather than a plunge.
+const MAX_HOP_DOWN=900;
 
 function nextAction(){
  const options=visiblePlatforms();if(!options.length){if(!walker.surface?.dock){walker.hasRun=true;walker.jump(measure({dock:true}),.5);}return;}
@@ -147,10 +166,15 @@ function moveByte(now){
   // like the fall itself — otherwise he is silently moved past every ledge in
   // the gap and only ever lands once he out-accelerates the scroll, hundreds
   // of pixels further down.
-  // Scrolling back up leaves him standing on a ledge far below the fold, where
-  // he is simply invisible until you scroll down again. Drop him in from the
-  // top of the viewport instead so he rejoins you under his own steam.
-  if(walker.position.y>scrollY+innerHeight+220){
+  // Scrolling back up leaves him STANDING on a ledge far below the fold, where
+  // he is invisible until you scroll down again. Drop him in from the top so he
+  // rejoins you under his own steam.
+  //
+  // Explicitly not while falling. It used to fire mid-fall, which turned into
+  // an infinite loop the moment the ledge set got sparse: nothing below him at
+  // his x, so he fell past the bottom, got teleported back to the top, fell
+  // again, forever. A fall now always ends by landing on something.
+  if(walker.state!=='fall'&&walker.position.y>scrollY+innerHeight+220){
    walker.position.y=scrollY+STEP_OFF;
    walker.fall();
   }
