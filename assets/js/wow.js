@@ -30,9 +30,75 @@ function toggleChat(value){open=value;chat.hidden=!value;bot.setAttribute('aria-
 bot.onclick=()=>toggleChat(!open);chat.querySelector('.byte-close').onclick=()=>toggleChat(false);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&open)toggleChat(false);});
 bot.addEventListener('pointerenter',()=>hover=true);bot.addEventListener('pointerleave',()=>hover=false);
-const platforms=[...document.querySelectorAll('main .btn,main .path-image,main .hero-stage,main .magnetic')];
-function measure(surface){if(surface.dock)return {...surface,left:innerWidth-160,top:innerHeight-55+scrollY,width:140};const r=surface.element.getBoundingClientRect();return {...surface,left:r.left+scrollX,top:r.top+scrollY,width:r.width};}
-function visiblePlatforms(){return platforms.map(element=>measure({element})).filter(r=>r.width>110&&r.top-scrollY>190&&r.top-scrollY<innerHeight-25&&r.left>=0&&r.left+r.width<=innerWidth+2);}
+// Every horizontal edge Byte can stand on: section tops (the band boundaries),
+// every image, every line break, and the interactive blocks. A <br> is included
+// because it marks a real visual line in the copy even though it draws nothing.
+const platforms=[...document.querySelectorAll(
+ 'main section,main img,main hr,main br,main .btn,main .card,main .quote,main .path-card,main .path-image,main .hero-stage,main .magnetic'
+)];
+
+// A <br> has no box of its own — its rect is a zero-width sliver at the end of
+// the line. Borrow the parent block's horizontal extent so the line break
+// becomes a proper ledge spanning the text column.
+function ledgeRect(element){
+ const r=element.getBoundingClientRect();
+ if(element.tagName!=='BR')return r;
+ const host=element.parentElement;
+ if(!host)return r;
+ const h=host.getBoundingClientRect();
+ return {left:h.left,width:h.width,top:r.top||h.top,height:0};
+}
+
+function measure(surface){
+ if(surface.dock)return {...surface,left:innerWidth-160,top:innerHeight-55+scrollY,width:140};
+ const r=ledgeRect(surface.element);
+ return {...surface,left:r.left+scrollX,top:r.top+scrollY,width:r.width};
+}
+
+// Rects are cached rather than remeasured per frame: the fall does a collision
+// test every tick, and calling getBoundingClientRect on ~40 nodes at 60fps
+// would force a layout flush each time.
+let ledges=[],ledgesStale=true;
+function refreshLedges(){
+ const found=platforms.map(element=>measure({element})).filter(r=>r.width>90&&Number.isFinite(r.top));
+ // An image inside a card produces three ledges on identical coordinates — the
+ // <img>, its .path-image wrapper and the <a> around both. They are the same
+ // physical line, so keep one and let the innermost element win, which makes
+ // "he landed on the image" true in the obvious sense as well as the visual one.
+ const rank=el=>el&&el.tagName==='IMG'?0:1;
+ const seen=new Map();
+ for(const r of found){
+  const key=`${Math.round(r.top)}|${Math.round(r.left)}|${Math.round(r.width)}`;
+  const prev=seen.get(key);
+  if(!prev||rank(r.element)<rank(prev.element))seen.set(key,r);
+ }
+ ledges=[...seen.values()];
+ ledgesStale=false;
+}
+function allLedges(){if(ledgesStale)refreshLedges();return ledges;}
+addEventListener('resize',()=>{ledgesStale=true;},{passive:true});
+
+function visiblePlatforms(){return allLedges().filter(r=>r.width>110&&r.top-scrollY>190&&r.top-scrollY<innerHeight-25&&r.left>=0&&r.left+r.width<=innerWidth+2);}
+
+// Highest ledge crossed while falling from `from` to `to` at horizontal x.
+// Sweeping the segment (rather than testing the end point) stops a fast fall
+// from tunnelling through a thin ledge between two frames.
+function findGround(x,from,to){
+ let best=null;
+ for(const r of allLedges()){
+  if(r.top<=from||r.top>to)continue;           // not crossed this frame
+  if(x<r.left+6||x>r.left+r.width-6)continue;  // not above this ledge
+  if(!best||r.top<best.top)best=r;             // land on the first one met
+ }
+ return best;
+}
+
+// Nothing below him at all — settle on the bottom of the document so he can
+// never fall out of the page and vanish.
+function floorLedge(){
+ const bottom=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);
+ return {floor:true,left:0,width:innerWidth,top:bottom-90};
+}
 function nextAction(){
  const options=visiblePlatforms();if(!options.length){if(!walker.surface?.dock){walker.hasRun=true;walker.jump(measure({dock:true}),.5);}return;}
  const current=walker.surface;
@@ -47,7 +113,35 @@ function nextAction(){
 function moveByte(now){
  const dt=movementTime?Math.min((now-movementTime)/1000,.05):0;movementTime=now;
  const stopped=paused||open||hover||document.activeElement===bot||document.hidden||innerWidth<700;
- if(!stopped&&walkingReady){walker.update(dt,measure);if(walker.state==='idle'&&walker.elapsed>=walker.wait)nextAction();}
+ if(!stopped&&walkingReady){
+  walker.update(dt,measure,findGround);
+  // Scrolling can outrun gravity, so he gets dragged down to the top edge to
+  // stay on screen. That drag is a teleport, so it has to be collision-tested
+  // like the fall itself — otherwise he is silently moved past every ledge in
+  // the gap and only ever lands once he out-accelerates the scroll, hundreds
+  // of pixels further down.
+  // Scrolling back up leaves him standing on a ledge far below the fold, where
+  // he is simply invisible until you scroll down again. Drop him in from the
+  // top of the viewport instead so he rejoins you under his own steam.
+  if(walker.position.y>scrollY+innerHeight+220){
+   walker.position.y=scrollY+STEP_OFF;
+   walker.fall();
+  }
+
+  const ceiling=scrollY+STEP_OFF;
+  if(walker.position.y<ceiling){
+   const dragged=findGround(walker.position.x,walker.position.y,ceiling);
+   // Sweep whatever state he is in. Restricting this to the fall state meant a
+   // ledge he was standing on could scroll past the ceiling and drag him
+   // straight through the images below it without ever touching down.
+   if(dragged){walker.impact=Math.max(walker.velocityY,420);walker.land(dragged);}
+   else walker.catchUp(ceiling);
+  }
+  // Ran out of page beneath him — plant him on the document floor rather than
+  // letting him accelerate away forever.
+  if(walker.state==='fall'){const floor=floorLedge();if(walker.position.y>=floor.top){walker.impact=walker.velocityY;walker.land(floor);}}
+  if(walker.state==='idle'&&walker.elapsed>=walker.wait)nextAction();
+ }
  else if(walker.surface&&walker.state!=='jump'){
   const r=measure(walker.surface);walker.position.x=r.left+24+(r.width-48)*walker.fraction;walker.position.y=r.top;
  }
@@ -55,7 +149,22 @@ function moveByte(now){
  if(innerWidth<700){walker.position={x:innerWidth-70,y:innerHeight-65+scrollY};walker.surface=null;walker.state='idle';walker.elapsed=0;}
  place();
 }
-window.addEventListener('scroll',place,{passive:true});
+// Scrolling down drags his ledge up and off the top of the screen; once it
+// reaches the header he steps off and gravity takes him to the next line down.
+// Keep scrolling and he cascades from section top to image to line break.
+const STEP_OFF=140;               // px below the viewport top where he lets go
+let lastScrollY=scrollY;
+window.addEventListener('scroll',()=>{
+ ledgesStale=true;                // layout moved under us; rects need remeasuring
+ const goingDown=scrollY>lastScrollY;lastScrollY=scrollY;
+ if(goingDown&&!paused&&innerWidth>=700&&walkingReady&&walker.surface&&
+    !walker.surface.dock&&!walker.surface.floor&&
+    (walker.state==='idle'||walker.state==='run'||walker.state==='land')&&
+    walker.surface.top-scrollY<STEP_OFF){
+  walker.fall();
+ }
+ place();
+},{passive:true});
 let mouse={x:0,y:0};window.addEventListener('pointermove',e=>{mouse={x:e.clientX/innerWidth*2-1,y:e.clientY/innerHeight*2-1};},{passive:true});
 // Both characters are real 3D models, lit and rendered locally with WebGL.
 try{
@@ -93,6 +202,16 @@ try{
   }else if(state==='jump'){
    m.legs.forEach((leg,i)=>{leg.rotation.x=(i===0?.7:.35)*Math.sin(Math.PI*progress);m.knees[i].rotation.x=-.95*Math.sin(Math.PI*progress);m.arms[i].rotation.z=(i===0?-1:1)*(.5+.5*Math.sin(Math.PI*progress));m.elbows[i].rotation.x=-.5;});
    m.root.rotation.x=progress<.5?-.1:.13;
+  }else if(state==='fall'){
+   // Arms thrown up, legs trailing, leaning back — reads as dropping rather
+   // than standing in mid-air. Eases in over the first third of a second so a
+   // short hop between close ledges does not snap into a dramatic pose.
+   const s=Math.min(1,progress*3);
+   m.legs.forEach((leg,i)=>{
+    leg.rotation.x=(i===0?.5:.16)*s;m.knees[i].rotation.x=-.75*s;m.feet[i].rotation.x=.3*s;
+    m.arms[i].rotation.z=(i===0?-1:1)*1.25*s;m.arms[i].rotation.x=-.35*s;m.elbows[i].rotation.x=-.4;
+   });
+   m.root.rotation.x=-.18*s;m.head.rotation.x=-.12*s;
   }
   // Plant the lowest sole on the surface; hip and knee bends lower the body.
   m.root.updateMatrixWorld(true);
@@ -117,7 +236,7 @@ try{
  }catch(e){stage.classList.remove('webgl-ready');stage.querySelector('.hero-webgl')?.remove();stage.querySelector('.play-controls')?.setAttribute('hidden','');}}
  let last=0,petFacing=0;function tick(now){requestAnimationFrame(tick);if(document.hidden){movementTime=now;return;}if(now-last<25)return;last=now;const t=now/1000;
  moveByte(now);
- if(pet){const m=pet.model;const moving=['run','crouch','jump','land'].includes(walker.state);
+ if(pet){const m=pet.model;const moving=['run','crouch','jump','land','fall'].includes(walker.state);
  const desired=moving?walker.direction*1.05:0;petFacing+=(desired-petFacing)*.15;
  poseRig(m,moving?walker.state:'idle',walker.stride,walker.progress,petFacing,t);
  m.head.rotation.y=paused?0:moving?walker.direction*.05:Math.sin(t*.45)>.1?mouse.x*.4:Math.sin(t*.6)*.12;
