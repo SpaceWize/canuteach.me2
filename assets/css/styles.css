@@ -1,0 +1,848 @@
+/* ==========================================================================
+   Computer U-Teach — Design System
+   Light theme only. Soft blues, clean whites, light grays.
+   --------------------------------------------------------------------------
+   FIX (audit #1): The old header was 314px tall on desktop and 919px on a
+   375x812 phone — a mobile visitor scrolled past a full screen of header
+   before seeing any content. The header here is a fixed 68px (60px on
+   mobile), so content starts immediately.
+   ========================================================================== */
+
+/* --- Design tokens ------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg:          #F8FAFC;   /* page background: soft off-white */
+  --bg-tint:     #F0F7FF;   /* alternating section: very light blue-gray */
+  --card:        #FFFFFF;
+
+  /* Brand */
+  --blue-600:    #2563EB;   /* primary */
+  --blue-700:    #1D4ED8;   /* primary hover / gradient end */
+  --sky:         #0EA5E9;   /* accent */
+
+  /* Text — all combinations below meet WCAG AA on --bg and --card */
+  --text:        #0F172A;   /* 17.4:1 on white */
+  --text-2:      #475569;   /*  8.6:1 on white */
+  --muted:       #64748B;   /*  5.6:1 on white — AA for normal text */
+
+  /* Lines */
+  --border:      #E0F2FE;
+  --border-str:  #BFDBFE;   /* stronger, for focus + emphasis */
+
+  /* Elevation — blue-tinted so shadows feel part of the palette */
+  --shadow-sm:   0 1px 2px rgba(15, 23, 42, .04), 0 1px 3px rgba(37, 99, 235, .06);
+  --shadow:      0 4px 6px -1px rgba(15, 23, 42, .05), 0 10px 20px -6px rgba(37, 99, 235, .12);
+  --shadow-lg:   0 10px 20px -5px rgba(15, 23, 42, .06), 0 24px 48px -12px rgba(37, 99, 235, .20);
+  --shadow-pop:  0 18px 30px -8px rgba(15, 23, 42, .10), 0 40px 70px -20px rgba(37, 99, 235, .28);
+
+  /* Type */
+  --font-head: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Layout */
+  --header-h:    68px;
+  --maxw:        1180px;
+  --radius:      16px;
+  --radius-lg:   24px;
+
+  /* Motion — gentle springs, never harsh linear */
+  --ease-out:    cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@media (max-width: 768px) {
+  :root { --header-h: 60px; }
+}
+
+/* --- Reset --------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  /* Anchor targets clear the fixed header instead of hiding beneath it */
+  scroll-padding-top: calc(var(--header-h) + 16px);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 17px;          /* Slightly larger base — readability for seniors */
+  line-height: 1.65;
+  color: var(--text-2);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+img, svg, video { display: block; max-width: 100%; height: auto; }
+button { font: inherit; color: inherit; }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-head);
+  color: var(--text);
+  line-height: 1.15;
+  margin: 0 0 .5em;
+  letter-spacing: -.02em;
+}
+
+/* FIX (audit #9): the old site had zero <h1> and jumped H5 -> H4 -> H2.
+   Sizes here are decoupled from level so heading order can stay logical. */
+h1 { font-size: clamp(2.25rem, 5.5vw, 3.75rem); font-weight: 800; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.75rem);   font-weight: 800; }
+h3 { font-size: clamp(1.35rem, 2.5vw, 1.75rem); font-weight: 700; }
+h4 { font-size: 1.2rem;   font-weight: 700; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--blue-700); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+/* --- Accessibility ------------------------------------------------------- */
+
+/* FIX (audit #9): visible, high-contrast focus ring on every interactive
+   element. Keyboard users previously had no indication of position. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--blue-600);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px; top: -100px;
+  z-index: 2000;
+  background: var(--blue-700);
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 0 0 10px 10px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top .2s var(--ease-out);
+}
+.skip-link:focus { top: 0; }
+
+/* --- Layout helpers ------------------------------------------------------ */
+.container { width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: 24px; }
+@media (max-width: 640px) { .container { padding-inline: 18px; } }
+
+.section { padding: clamp(56px, 8vw, 104px) 0; }
+.section--tint { background: var(--bg-tint); border-block: 1px solid var(--border); }
+
+.section-head { max-width: 720px; margin: 0 auto clamp(32px, 5vw, 56px); text-align: center; }
+.section-head p { color: var(--muted); font-size: 1.05rem; margin: 0; }
+
+.eyebrow {
+  display: inline-block;
+  font-family: var(--font-head);
+  font-size: .78rem; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--blue-700);
+  background: var(--bg-tint);
+  border: 1px solid var(--border-str);
+  padding: 6px 14px; border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+.lede { font-size: 1.125rem; color: var(--text-2); }
+
+/* ==========================================================================
+   BUTTONS
+   FIX (audit #5): "Go to repair service" rendered black text on a black
+   background — rgb(0,0,0) on rgb(0,0,0), a 1:1 contrast ratio. It was not
+   "dark", it was invisible. Every button below is an explicit, tested pair.
+   Minimum target 52px tall (was 56px wide x 19px tall in places) so it
+   clears the 44px WCAG touch minimum with room for less precise taps.
+   ========================================================================== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 52px;
+  padding: 14px 30px;
+  font-family: var(--font-head);
+  font-size: 1.02rem; font-weight: 700;
+  line-height: 1;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .25s var(--ease-spring),
+              box-shadow .25s var(--ease-out),
+              background-color .2s ease,
+              color .2s ease;
+}
+
+/* Primary — white on a blue gradient. Contrast 6.3:1. */
+.btn--primary {
+  background: linear-gradient(135deg, var(--blue-600), var(--blue-700));
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+.btn--primary:hover { transform: translateY(-3px) scale(1.02); box-shadow: var(--shadow-lg); }
+.btn--primary:active { transform: translateY(-1px) scale(.99); }
+
+/* Secondary — blue on white, bordered. Contrast 6.3:1. */
+.btn--secondary {
+  background: var(--card);
+  color: var(--blue-700);
+  border-color: var(--border-str);
+  box-shadow: var(--shadow-sm);
+}
+.btn--secondary:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: var(--blue-600);
+  box-shadow: var(--shadow);
+}
+
+/* Accent — used for the repair CTA that was previously invisible.
+   NOTE: an earlier version of this rule used --sky (#0EA5E9) as the gradient
+   start. Measured against white text that is only 2.77:1 — it FAILS WCAG AA
+   (4.5:1 normal, 3:1 large), which would have reintroduced the very problem
+   this button exists to fix. The deeper sky pair below measures 5.93:1 at the
+   light end and 7.56:1 at the dark end, so the label is readable across the
+   whole gradient. --sky is still used for borders and icons, where it sits on
+   light backgrounds and contrast is not at issue. */
+.btn--accent {
+  background: linear-gradient(135deg, #0369A1, #075985);
+  color: #fff;
+  box-shadow: 0 10px 20px -6px rgba(3, 105, 161, .45);
+}
+.btn--accent:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 18px 32px -8px rgba(3, 105, 161, .55); }
+
+/* On a saturated blue panel, an inverted button keeps contrast high */
+.btn--onblue {
+  background: #fff; color: var(--blue-700);
+  box-shadow: 0 10px 24px -6px rgba(2, 20, 60, .35);
+}
+.btn--onblue:hover { transform: translateY(-3px) scale(1.02); }
+
+.btn--lg { min-height: 60px; padding: 18px 40px; font-size: 1.1rem; }
+.btn--block { width: 100%; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 14px; }
+.btn-row--center { justify-content: center; }
+
+/* ==========================================================================
+   HEADER / NAVIGATION
+   FIX (audit #1): compact 68px bar, sticky, with a real mobile drawer.
+   FIX (audit #4 + #7): every link is a working relative path — no more
+   hardcoded "http://canuteach.me/..." (which forced two redirect hops and
+   tripped Chrome's "not secure" warning) and no more href="#" dead links.
+   ========================================================================== */
+.site-header {
+  position: fixed; inset: 0 0 auto 0;
+  z-index: 1000;
+  height: var(--header-h);
+  background: rgba(255, 255, 255, .85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  transition: box-shadow .3s var(--ease-out), background-color .3s ease;
+}
+.site-header.is-scrolled { box-shadow: var(--shadow-sm); background: rgba(255, 255, 255, .95); }
+
+.nav {
+  height: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; min-height: 44px; }
+/* FIX (audit): logo was a 90x90 source upscaled to 135x135 and rendered
+   blurry. Capped at its natural size here. */
+.brand__mark {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--blue-600), var(--sky));
+  color: #fff; font-family: var(--font-head); font-weight: 800; font-size: .95rem;
+  flex-shrink: 0;
+}
+.brand__name {
+  font-family: var(--font-head); font-weight: 800; font-size: 1.05rem;
+  color: var(--text); letter-spacing: -.02em; white-space: nowrap;
+}
+
+.nav__links { display: flex; align-items: center; gap: 4px; list-style: none; margin: 0; padding: 0; }
+
+/* :not(.btn) matters. The drawer's "Book a free class" is an <a class="btn">
+   inside this list, and a bare `.nav__links a` rule out-specifies `.btn` —
+   which silently overrode the button's colour, radius and display, leaving a
+   square slate-on-blue block with its label shoved left. Excluding buttons
+   here keeps the cascade honest rather than restating button styles later. */
+.nav__links a:not(.btn) {
+  display: block;
+  padding: 9px 14px;
+  font-size: .96rem; font-weight: 600;
+  color: var(--text-2);
+  text-decoration: none;
+  border-radius: 9px;
+  transition: color .18s ease, background-color .18s ease;
+}
+.nav__links a:not(.btn):hover { color: var(--blue-700); background: var(--bg-tint); }
+.nav__links a:not(.btn)[aria-current="page"] { color: var(--blue-700); background: var(--bg-tint); }
+
+.nav__cta { flex-shrink: 0; }
+.nav__cta .btn { min-height: 44px; padding: 11px 22px; font-size: .95rem; }
+
+.nav__toggle {
+  display: none;
+  width: 46px; height: 46px;
+  align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--border-str);
+  border-radius: 11px; cursor: pointer;
+}
+.nav__toggle span {
+  display: block; position: relative;
+  width: 20px; height: 2px; border-radius: 2px; background: var(--text);
+  transition: transform .3s var(--ease-out), background-color .2s;
+}
+.nav__toggle span::before, .nav__toggle span::after {
+  content: ''; position: absolute; left: 0;
+  width: 20px; height: 2px; border-radius: 2px; background: var(--text);
+  transition: transform .3s var(--ease-out), top .3s var(--ease-out);
+}
+.nav__toggle span::before { top: -6px; }
+.nav__toggle span::after  { top:  6px; }
+.nav__toggle[aria-expanded="true"] span { background: transparent; }
+.nav__toggle[aria-expanded="true"] span::before { top: 0; transform: rotate(45deg); }
+.nav__toggle[aria-expanded="true"] span::after  { top: 0; transform: rotate(-45deg); }
+
+@media (max-width: 900px) {
+  .nav__toggle { display: flex; }
+  .nav__cta { display: none; }
+
+  .nav__links {
+    position: fixed; inset: var(--header-h) 0 auto 0;
+    flex-direction: column; align-items: stretch; gap: 2px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    padding: 14px 18px 22px;
+    /* Hidden by default; opacity+visibility so it stays keyboard-inert */
+    opacity: 0; visibility: hidden;
+    transform: translateY(-10px);
+    transition: opacity .25s var(--ease-out), transform .25s var(--ease-out), visibility .25s;
+    max-height: calc(100vh - var(--header-h)); overflow-y: auto;
+  }
+  .nav__links.is-open { opacity: 1; visibility: visible; transform: translateY(0); }
+  .nav__links a:not(.btn) { padding: 15px 14px; font-size: 1.05rem; border-radius: 11px; }
+  .nav__links .nav__mobile-cta { margin-top: 12px; }
+  .nav__links .nav__mobile-cta .btn { width: 100%; }
+}
+@media (min-width: 901px) { .nav__mobile-cta { display: none; } }
+
+/* Offset page content by the fixed header */
+.main { padding-top: var(--header-h); }
+
+/* ==========================================================================
+   HERO + INTRO SEQUENCE
+   ========================================================================== */
+.hero {
+  position: relative;
+  padding: clamp(48px, 7vw, 86px) 0 clamp(56px, 8vw, 96px);
+  background:
+    radial-gradient(1000px 460px at 82% -8%, rgba(14, 165, 233, .13), transparent 62%),
+    radial-gradient(760px 420px at 8% 8%, rgba(37, 99, 235, .10), transparent 58%),
+    var(--bg);
+  overflow: hidden;
+}
+.hero__grid {
+  display: grid; grid-template-columns: 1.05fr .95fr;
+  gap: clamp(32px, 5vw, 64px); align-items: center;
+}
+@media (max-width: 960px) {
+  .hero__grid { grid-template-columns: 1fr; gap: 40px; }
+  .hero__art { order: -1; }
+}
+
+.hero h1 { margin-bottom: 20px; }
+.hero h1 .accent {
+  background: linear-gradient(120deg, var(--blue-600), var(--sky));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+/* "To Learn" drops to its own line under "Are You Ready". display:block rather
+   than a <br> so the break is a styling decision, not baked into the markup. */
+.hero__h1-break { display: block; }
+.hero__lede { font-size: 1.17rem; color: var(--text-2); max-width: 54ch; margin-bottom: 30px; }
+
+.hero__trust {
+  display: flex; flex-wrap: wrap; gap: 10px 26px;
+  margin-top: 34px; padding-top: 26px; border-top: 1px solid var(--border);
+  list-style: none; padding-left: 0;
+}
+.hero__trust li { display: flex; align-items: center; gap: 9px; font-size: .95rem; color: var(--muted); }
+.hero__trust svg { flex-shrink: 0; color: var(--sky); }
+
+/* ==========================================================================
+   MAGNETIC IMAGE — the playful hover effect
+   The lift, rotation and shadow live here; the cursor-follow offset is
+   applied as CSS custom properties by main.js. Splitting it this way means
+   the whole effect degrades to a plain static image without JS.
+   ========================================================================== */
+.magnetic {
+  --mx: 0px; --my: 0px; --rot: 0deg; --scale: 1;
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transform: translate3d(var(--mx), var(--my), 0) rotate(var(--rot)) scale(var(--scale));
+  transition: box-shadow .4s var(--ease-out);
+  will-change: transform;
+}
+.magnetic.is-hovered { box-shadow: var(--shadow-pop); z-index: 5; }
+.magnetic img { width: 100%; height: 100%; object-fit: cover; }
+
+/* When JS is not driving it, or motion is reduced, fall back to a gentle
+   CSS-only lift so the card still feels responsive. */
+.magnetic.is-static:hover { box-shadow: var(--shadow-lg); }
+
+/* ==========================================================================
+   CARDS
+   ========================================================================== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+  transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out), border-color .3s ease;
+}
+.card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--border-str); }
+
+.grid { display: grid; gap: 24px; }
+.grid--2 { grid-template-columns: repeat(2, 1fr); }
+.grid--3 { grid-template-columns: repeat(3, 1fr); }
+.grid--4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 980px) { .grid--4 { grid-template-columns: repeat(2, 1fr); } .grid--3 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 680px) { .grid--2, .grid--3, .grid--4 { grid-template-columns: 1fr; } }
+
+/* --- Why study cards ----------------------------------------------------- */
+.why__icon {
+  width: 50px; height: 50px; border-radius: 14px;
+  display: grid; place-items: center;
+  background: var(--bg-tint); border: 1px solid var(--border-str);
+  color: var(--blue-700); margin-bottom: 18px;
+}
+.why h3 { font-size: 1.3rem; margin-bottom: 12px; }
+.why ul { margin: 0; padding-left: 20px; color: var(--text-2); }
+.why li { margin-bottom: 9px; }
+.why li::marker { color: var(--sky); }
+
+/* --- Course / service cards ---------------------------------------------- */
+.course-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.course-card__media { aspect-ratio: 4 / 3; background: var(--bg-tint); border-bottom: 1px solid var(--border); }
+.course-card__media img { width: 100%; height: 100%; object-fit: cover; }
+.course-card__body { padding: 24px; display: flex; flex-direction: column; flex: 1; }
+.course-card__body h3 { font-size: 1.2rem; }
+.course-card__body p { color: var(--muted); font-size: .97rem; flex: 1; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-head); font-size: .78rem; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+  padding: 5px 12px; border-radius: 999px;
+  background: var(--bg-tint); color: var(--blue-700);
+  border: 1px solid var(--border-str);
+}
+.pill--online { background: #ECFEFF; color: #0E7490; border-color: #A5F3FC; }
+.pill--person { background: #EFF6FF; color: #1D4ED8; border-color: var(--border-str); }
+.pill--free   { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+
+.price {
+  font-family: var(--font-head); font-weight: 800;
+  font-size: 1.45rem; color: var(--text);
+}
+.price small { font-weight: 600; font-size: .82rem; color: var(--muted); }
+
+/* --- Testimonials -------------------------------------------------------- */
+.quote { display: flex; flex-direction: column; gap: 18px; }
+.quote__stars { color: #F59E0B; letter-spacing: 2px; }
+.quote p { font-size: 1.02rem; color: var(--text-2); margin: 0; }
+.quote__who { display: flex; align-items: center; gap: 12px; margin-top: auto; }
+.quote__avatar {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--blue-600), var(--sky));
+  color: #fff; font-family: var(--font-head); font-weight: 700;
+}
+
+/* Real photo instead of initials. Reviewers who supplied a picture get one;
+   the gradient-initials version stays as the fallback for those who did not,
+   so the row reads as consistent either way. */
+.quote__avatar--photo {
+  background: none;
+  object-fit: cover;
+  border: 2px solid var(--border-str);
+}
+.quote__name { font-family: var(--font-head); font-weight: 700; color: var(--text); }
+
+/* --- CTA panel ----------------------------------------------------------- */
+.cta-panel {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding: clamp(38px, 6vw, 68px);
+  background: linear-gradient(135deg, var(--blue-700), var(--blue-600) 55%, var(--sky));
+  color: #fff;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+.cta-panel h2 { color: #fff; }
+.cta-panel p { color: rgba(255, 255, 255, .92); }
+.cta-panel::after {
+  content: ''; position: absolute; right: -80px; top: -80px;
+  width: 320px; height: 320px; border-radius: 50%;
+  background: rgba(255, 255, 255, .10);
+}
+
+/* --- Repair band --------------------------------------------------------- */
+.repair__grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 5vw, 60px); align-items: center; }
+@media (max-width: 880px) { .repair__grid { grid-template-columns: 1fr; } }
+
+/* --- Lego mascot ---------------------------------------------------------
+   FIX (audit #6): the original rendered at full source size and broke the
+   layout. Hard-capped here and anchored as a small accent. */
+.mascot { width: clamp(88px, 12vw, 132px); height: auto; flex-shrink: 0; }
+.mascot-note {
+  display: flex; align-items: center; gap: 20px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm);
+}
+@media (max-width: 520px) { .mascot-note { flex-direction: column; text-align: center; } }
+
+/* ==========================================================================
+   BOOKING
+   FIX (audit #4): scheduling links used to dump visitors on a bare Acuity
+   page with no branding and no way back. Booking now happens on our own
+   page, inside our own header and footer.
+   ========================================================================== */
+.booking-embed {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: #fff; box-shadow: var(--shadow-sm);
+  min-height: 800px;
+}
+.booking-embed iframe { display: block; width: 100%; min-height: 800px; border: 0; }
+
+.arrival {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;
+}
+@media (max-width: 680px) { .arrival { grid-template-columns: 1fr; } }
+.arrival__card { border-left: 4px solid var(--sky); }
+.arrival__card--person { border-left-color: var(--blue-600); }
+.arrival__card ul { margin: 12px 0 0; padding-left: 20px; }
+.arrival__card li { margin-bottom: 8px; }
+
+/* --- Callout ------------------------------------------------------------- */
+.callout {
+  display: flex; gap: 16px; align-items: flex-start;
+  background: var(--bg-tint);
+  border: 1px solid var(--border-str);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+}
+.callout svg { flex-shrink: 0; color: var(--blue-600); margin-top: 3px; }
+.callout p:last-child { margin-bottom: 0; }
+
+/* ==========================================================================
+   FORMS
+   FIX (audit #9): the old contact form had three inputs with no <label>,
+   no aria-label and no placeholder — a screen reader announced three
+   blank boxes. Every field here has a real, visible label.
+   ========================================================================== */
+.form { display: grid; gap: 20px; }
+.field { display: grid; gap: 7px; }
+.field label { font-family: var(--font-head); font-weight: 600; color: var(--text); font-size: .95rem; }
+.field .hint { font-size: .85rem; color: var(--muted); }
+.field input, .field textarea, .field select {
+  width: 100%;
+  padding: 14px 16px;
+  font-family: var(--font-body); font-size: 1rem;
+  color: var(--text); background: #fff;
+  border: 1.5px solid var(--border-str); border-radius: 12px;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.field input::placeholder, .field textarea::placeholder { color: #94A3B8; }
+.field input:focus, .field textarea:focus, .field select:focus {
+  outline: none; border-color: var(--blue-600);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, .14);
+}
+.field textarea { min-height: 150px; resize: vertical; }
+.required { color: #DC2626; }
+
+/* --- FAQ ----------------------------------------------------------------- */
+.faq { display: grid; gap: 12px; }
+.faq details {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.faq details[open] { border-color: var(--border-str); box-shadow: var(--shadow-sm); }
+.faq summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 20px 24px; cursor: pointer;
+  font-family: var(--font-head); font-weight: 700; color: var(--text);
+  list-style: none;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: '+'; font-size: 1.5rem; font-weight: 400; color: var(--blue-600);
+  transition: transform .25s var(--ease-out); flex-shrink: 0; line-height: 1;
+}
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq .faq__body { padding: 0 24px 22px; color: var(--text-2); }
+
+/* ==========================================================================
+   FOOTER
+   FIX (audit #7): all five footer links were href="#". They are real now.
+   FIX (audit #1/#2): the footer previously showed +1(604)-225-7434 — a
+   transposed digit that sent callers to a wrong number — and "Mon – Fri",
+   contradicting the header's Monday-to-Saturday. Both corrected.
+   FIX (audit #8): phone and email are now tel:/mailto: links, so a senior
+   on a phone can tap to call instead of memorising the number.
+   ========================================================================== */
+.site-footer {
+  background: #0F172A; color: #CBD5E1;
+  padding: clamp(48px, 6vw, 72px) 0 28px;
+}
+.site-footer h2, .site-footer h3 { color: #fff; font-size: 1.05rem; margin-bottom: 16px; }
+.site-footer a { color: #CBD5E1; text-decoration: none; transition: color .2s ease; }
+.site-footer a:hover { color: #fff; text-decoration: underline; }
+.site-footer :focus-visible { outline-color: #7DD3FC; }
+
+.footer__grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1.2fr; gap: 40px; }
+@media (max-width: 900px) { .footer__grid { grid-template-columns: 1fr 1fr; gap: 32px; } }
+@media (max-width: 560px) { .footer__grid { grid-template-columns: 1fr; } }
+
+.footer__brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.footer__brand .brand__name { color: #fff; }
+/* Touch targets: footer links rendered at 21px tall, well under the 44px
+   minimum. That matters more here than on most sites — the audience includes
+   seniors with less precise aim, and the phone number is the single most
+   important tap on the page. Padding brings each link to 44px without
+   changing the visual rhythm (the gap shrinks to compensate). */
+.footer__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.footer__list a,
+.footer__contact a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.footer__contact { display: grid; gap: 6px; font-size: .95rem; }
+.footer__contact div { display: flex; gap: 11px; align-items: flex-start; }
+.footer__contact svg { flex-shrink: 0; margin-top: 4px; color: #38BDF8; }
+.footer__bottom {
+  margin-top: 44px; padding-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, .12);
+  display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;
+  font-size: .88rem; color: #94A3B8;
+}
+
+/* ==========================================================================
+   SCROLL REVEALS
+   IntersectionObserver adds .is-visible once (never re-hides on scroll up).
+   ========================================================================== */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity .7s var(--ease-out), transform .7s var(--ease-out);
+}
+.reveal.is-visible { opacity: 1; transform: none; }
+.reveal[data-delay="1"] { transition-delay: .09s; }
+.reveal[data-delay="2"] { transition-delay: .18s; }
+.reveal[data-delay="3"] { transition-delay: .27s; }
+.reveal[data-delay="4"] { transition-delay: .36s; }
+
+/* --- Gentle ambient float for hero art ----------------------------------- */
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
+.floaty { animation: floaty 7s ease-in-out infinite; }
+
+/* ==========================================================================
+   REDUCED MOTION
+   Honours the OS setting everywhere: no intro line, no float, no reveal
+   translate, no hover follow. Content is shown in its final state instantly.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+
+  .reveal { opacity: 1 !important; transform: none !important; }
+  .floaty { animation: none !important; }
+  .magnetic { transform: none !important; }
+  .btn:hover, .card:hover { transform: none !important; }
+}
+
+/* ==========================================================================
+   DIRECTIONAL SLIDE PANELS
+   --------------------------------------------------------------------------
+   Vertical scrolling drives horizontal movement. A tall outer container gives
+   the sequence its timeline; a sticky child pins the viewport; each panel is
+   absolutely positioned on top of the last with a rising z-index, and slides
+   in from an alternating edge — right, left, right, left — each covering the
+   panel before it.
+
+   Panel height is the viewport minus the fixed header, so a pinned panel
+   never hides behind the nav.
+
+   IMPORTANT TRADE-OFF: this pins the page and takes over the scroll. That is
+   disorienting on a small screen and hostile to anyone who scrolls in large
+   jumps — and this site's audience includes seniors. So the whole mechanism
+   is DESKTOP ONLY: under 900px, or with reduced motion requested, the panels
+   fall back to ordinary stacked sections. No content is lost either way.
+   ========================================================================== */
+.panels {
+  position: relative;
+  z-index: 2;
+  /* 4 panels x 80vh of scroll each. The reference used 100vh per panel;
+     80vh is the "slightly faster" pacing that was asked for. */
+  height: calc(4 * 80vh);
+  background: var(--bg);
+}
+
+.panels__sticky {
+  position: sticky;
+  top: var(--header-h);
+  height: calc(100vh - var(--header-h));
+  overflow: hidden;
+}
+
+.panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  /* Last-resort safety net only. The sizing below is tuned so panels FIT;
+     if a window is unusually short, content stays reachable rather than
+     being clipped. Deliberately NOT overscroll-behavior:contain — that would
+     trap the wheel inside the panel instead of letting it chain back to the
+     page once the panel bottoms out. */
+  overflow-y: auto;
+  background: var(--bg);
+  will-change: transform;
+}
+.panel--tint { background: var(--bg-tint); }
+.panel > .container { width: 100%; padding-block: 20px; }
+
+/* --- Panel content is compressed to fit one viewport ---------------------
+   A pinned panel that scrolls internally is the worst of both worlds: the
+   wheel appears to do nothing, then suddenly jumps. Everything below exists
+   to make the content fit at ordinary laptop heights so that never happens.
+   No content is removed — only sized down. The full-size treatment still
+   applies on mobile, where panels revert to normal stacked sections.
+   ------------------------------------------------------------------------ */
+.panel h2 { font-size: clamp(1.4rem, 2.4vw, 1.95rem); margin-bottom: .3em; }
+.panel .section-head { margin-bottom: 20px; }
+.panel .section-head p { font-size: .95rem; }
+.panel .eyebrow { margin-bottom: 12px; }
+.panel .lede { font-size: 1rem; }
+.panel p { margin-bottom: .7rem; }
+
+.panel .grid { gap: 18px; }
+.panel .card { padding: 18px; }
+.panel .course-card { padding: 0; }
+
+/* Hold three columns inside panels. The global .grid--3 drops to two columns
+   under 980px, which wrapped these cards onto a second row and doubled the
+   panel's height — that lost height was being paid for by squashing the
+   images. Panels only ever run at >=900px (below that they revert to stacked
+   sections), so three columns is always viable here. */
+.panel .grid--3 { grid-template-columns: repeat(3, 1fr); }
+
+/* Photo-friendly crop. This was 21/9, which reduced a square photograph to a
+   sliver showing ~40% of its height — fine for the flat SVG illustrations it
+   was tuned against, useless for a picture of two people. */
+.panel .course-card__media { aspect-ratio: 4 / 3; }
+
+/* Subjects in these photos sit slightly above centre, so a centred crop cuts
+   foreheads. Biasing upward keeps faces in frame at every aspect ratio. */
+.panel .course-card__media img,
+.course-card__media img { object-position: center 40%; }
+.panel .course-card__body { padding: 16px; }
+.panel .course-card__body h3 { font-size: 1.05rem; margin-bottom: 6px; }
+.panel .course-card__body p { font-size: .88rem; margin-bottom: 12px; }
+
+.panel .quote { gap: 12px; }
+.panel .quote p { font-size: .9rem; }
+.panel .quote__avatar { width: 38px; height: 38px; font-size: .85rem; }
+
+.panel .btn { min-height: 46px; padding: 12px 22px; font-size: .95rem; }
+.panel .btn--lg { min-height: 50px; padding: 14px 26px; font-size: 1rem; }
+
+.panel .mascot { width: clamp(60px, 7vw, 88px); }
+.panel .mascot-note { padding: 14px 18px; gap: 14px; }
+.panel .cta-panel { padding: clamp(28px, 4vw, 44px); }
+
+/* Short windows (1366x768 laptops land here): squeeze rather than scroll.
+   Everything hidden at this height is duplicated elsewhere — the intro
+   paragraph also opens the courses page, the mascot note is repeated on the
+   repair page, and the eyebrow only restates the heading. The illustrations
+   are kept, just flatter, because Explore Courses is the strongest section
+   on the site and losing its images would cost more than it saves. */
+@media (max-height: 780px) {
+  .panel .course-card__media { aspect-ratio: 3 / 2; }
+  .panel .section-head p { display: none; }   /* still in the DOM for mobile + SEO */
+  .panel .mascot-note { display: none; }      /* repeated on the repair page */
+  .panel h2 { font-size: 1.5rem; }
+}
+
+@media (max-height: 740px) {
+  .panel > .container { padding-block: 14px; }
+  .panel .eyebrow { display: none; }          /* the h2 already says it */
+  .panel .section-head { margin-bottom: 14px; }
+  /* Tightest crop we allow: a square photo still shows 56% of its height,
+     which is enough to read a scene. Below this the picture stops working. */
+  .panel .course-card__media { aspect-ratio: 16 / 9; }
+  .panel .course-card__body { padding: 14px; }
+  .panel .course-card__body p {
+    /* Trim to two lines rather than dropping the copy entirely */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .panel .btn { min-height: 42px; padding: 10px 18px; }
+}
+
+/* Progress dots — orientation, so the pinned section does not feel like a
+   scroll that has stopped working. */
+.panels__progress {
+  position: absolute;
+  right: 22px; top: 50%;
+  transform: translateY(-50%);
+  display: grid; gap: 10px;
+  z-index: 50;
+}
+.panels__dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--border-str);
+  transition: background-color .3s var(--ease-out), transform .3s var(--ease-out);
+}
+.panels__dot.is-active { background: var(--blue-600); transform: scale(1.45); }
+
+@media (max-width: 900px), (prefers-reduced-motion: reduce) {
+  .panels { height: auto; }
+  .panels__sticky { position: static; height: auto; overflow: visible; }
+  .panel {
+    position: static;
+    transform: none !important;
+    display: block;
+    overflow: visible;
+    padding-block: clamp(48px, 8vw, 88px);
+  }
+  .panel .course-card__media { aspect-ratio: 4 / 3; }
+  .panel .course-card__body { padding: 24px; }
+  .panels__progress { display: none; }
+}
+
+
+/* --- Print --------------------------------------------------------------- */
+@media print {
+  .site-header, .nav__toggle { display: none !important; }
+  .main { padding-top: 0; }
+  body { background: #fff; }
+}
